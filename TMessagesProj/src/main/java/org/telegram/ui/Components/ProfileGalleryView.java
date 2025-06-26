@@ -5,14 +5,19 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.BitmapShader;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.Path;
 import android.graphics.PointF;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.text.TextUtils;
+import android.util.Log;
 import android.util.SparseArray;
 import android.view.MotionEvent;
 import android.view.View;
@@ -28,7 +33,9 @@ import org.telegram.messenger.FileLoader;
 import org.telegram.messenger.FileLog;
 import org.telegram.messenger.ImageLocation;
 import org.telegram.messenger.ImageReceiver;
+import org.telegram.messenger.MessageObject;
 import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.MessagesStorage;
 import org.telegram.messenger.NotificationCenter;
 import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.UserObject;
@@ -36,10 +43,14 @@ import org.telegram.messenger.Utilities;
 import org.telegram.tgnet.ConnectionsManager;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.ActionBar;
+import org.telegram.ui.PhotoViewer;
 import org.telegram.ui.PinchToZoomHelper;
 import org.telegram.ui.ProfileActivity;
 
+import java.io.File;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
 
 public class ProfileGalleryView extends CircularViewPager implements NotificationCenter.NotificationCenterDelegate {
 
@@ -132,6 +143,8 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
         void onPhotosLoaded();
 
         void onVideoSet();
+
+        void invalidateGradient();
     }
 
     private int roundTopRadius;
@@ -252,7 +265,7 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                 progressToCustomAvatar = 2f - progressToCustomAvatar;
             }
 
-            progressToCustomAvatar = Utilities.clamp(progressToCustomAvatar, 1f ,0);
+            progressToCustomAvatar = Utilities.clamp(progressToCustomAvatar, 1f, 0);
         }
         setCustomAvatarProgress(progressToCustomAvatar);
     }
@@ -284,6 +297,7 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
             @Override
             public void onPageScrolled(int position, float positionOffset, int positionOffsetPixels) {
                 checkCustomAvatar(position, positionOffset);
+                updateCurrentShader(position, positionOffset);
                 if (positionOffsetPixels == 0) {
                     position = adapter.getRealPosition(position);
                     BackupImageView currentView = getCurrentItemView();
@@ -323,7 +337,6 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                         }
                     }
                 }
-
             }
 
             @Override
@@ -336,6 +349,7 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                 if (dialogPhotos != null) {
                     dialogPhotos.loadAfter(position - (adapter != null ? adapter.getExtraCount() : 0), forward);
                 }
+                updateCurrentShader(position, -1);
             }
 
             @Override
@@ -352,6 +366,97 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
 
         dialogPhotos = MessagesController.getInstance(currentAccount).getDialogPhotos(dialogId);
         dialogPhotos.loadCache();
+    }
+
+    public void updateCurrentShader(int position, float positionOffset) {
+        try {
+            if (positionOffset == -1) {
+                int realPos = adapter.getRealPosition(position);
+                BackupImageView leftView = getImageViewForPosition(realPos);
+                if (leftView == null) return;
+                ImageReceiver.BitmapHolder bmp1 = getSafeBitmapFromView(leftView);
+                if (bmp1 == null || bmp1.bitmap == null) return;
+                currentBlendedBitmap = drawBitmap(bmp1.bitmap);
+                if (callback != null) {
+                    callback.invalidateGradient();
+                }
+                return;
+            }
+            if (positionOffset < 0.001 || positionOffset > 0.999) {
+                return;
+            }
+            int realPos = adapter.getRealPosition(position);
+            int realNextPos = adapter.getRealPosition(position + 1);
+
+            BackupImageView leftView = getImageViewForPosition(realPos);
+            BackupImageView rightView = getImageViewForPosition(realNextPos);
+            if (leftView == null || rightView == null) return;
+
+            ImageReceiver.BitmapHolder bmp1 = getSafeBitmapFromView(leftView);
+            ImageReceiver.BitmapHolder bmp2 = getSafeBitmapFromView(rightView);
+            if (bmp1 == null || bmp2 == null || bmp1.bitmap == null || bmp2.bitmap == null) return;
+
+            currentBlendedBitmap = blendBitmapsVertical(bmp1.bitmap, bmp2.bitmap, positionOffset);
+            if (callback != null) {
+                callback.invalidateGradient();
+            }
+        } catch (Throwable e) {
+            FileLog.e(e);
+        }
+    }
+
+    private Bitmap drawBitmap(Bitmap bitmap) {
+        Bitmap strip1 = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight());
+        Bitmap result = Bitmap.createBitmap(bitmap.getWidth(), bitmap.getHeight(), Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(result);
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        canvas.drawBitmap(strip1, 0, 0, paint);
+        return result;
+    }
+
+    private Bitmap currentBlendedBitmap;
+
+    public Bitmap getCurrentBlendedBitmap() {
+        return currentBlendedBitmap;
+    }
+
+    private ImageReceiver.BitmapHolder getSafeBitmapFromView(BackupImageView imageView) {
+        return imageView.getImageReceiver().getBitmapSafe();
+    }
+
+    private BackupImageView getImageViewForPosition(int realPosition) {
+        int count = getChildCount();
+        for (int a = 0; a < count; a++) {
+            View child = getChildAt(a);
+            if (!(child instanceof BackupImageView)) {
+                continue;
+            }
+            int p = adapter.getRealPosition(adapter.imageViews.indexOf(child));
+            if (p != realPosition) {
+                continue;
+            }
+            return (BackupImageView) child;
+        }
+        return null;
+    }
+
+    private Bitmap blendBitmapsVertical(Bitmap bmp1, Bitmap bmp2, float offset) {
+        int height = Math.min(bmp1.getHeight(), bmp2.getHeight());
+        int x1 = (int) (bmp1.getWidth() * offset);
+        int width1 = (int) (bmp1.getWidth() * (1 - offset));
+        int width2 = (int) (bmp2.getWidth() * offset);
+        if (width1 == 0 || width2 == 0 || height == 0) return null;
+
+        Bitmap strip1 = Bitmap.createBitmap(bmp1, x1, 0, width1, height);
+        Bitmap strip2 = Bitmap.createBitmap(bmp2, 0, 0, width2, height);
+
+        Bitmap result = Bitmap.createBitmap((int) (bmp1.getWidth() * (1 - offset)) + (int) (bmp2.getWidth() * offset), height, Bitmap.Config.ARGB_8888);
+        Canvas canvas = new Canvas(result);
+
+        Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+        canvas.drawBitmap(strip1, 0, 0, paint);
+        canvas.drawBitmap(strip2, (int) (bmp1.getWidth() * (1 - offset)), 0, paint);
+        return result;
     }
 
     public void onDestroy() {
@@ -425,7 +530,7 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
         if (pinchToZoomHelper != null && getCurrentItemView() != null) {
             if (action != MotionEvent.ACTION_DOWN && isDownReleased && !pinchToZoomHelper.isInOverlayMode()) {
                 pinchToZoomHelper.checkPinchToZoom(MotionEvent.obtain(0, 0, MotionEvent.ACTION_CANCEL, 0, 0, 0), this, getCurrentItemView().getImageReceiver(), null, null, null);
-            } else if (pinchToZoomHelper.checkPinchToZoom(ev, this, getCurrentItemView().getImageReceiver(), null, null,null)) {
+            } else if (pinchToZoomHelper.checkPinchToZoom(ev, this, getCurrentItemView().getImageReceiver(), null, null, null)) {
                 if (!isDownReleased) {
                     isDownReleased = true;
                     callback.onRelease();
@@ -1028,7 +1133,6 @@ public class ProfileGalleryView extends CircularViewPager implements Notificatio
                 }
 
                 forceResetPosition = false;
-
                 if (callback != null) {
                     callback.onPhotosLoaded();
                 }

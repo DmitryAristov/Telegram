@@ -28,6 +28,7 @@ import androidx.annotation.Keep;
 import androidx.annotation.NonNull;
 import androidx.core.graphics.ColorUtils;
 
+import com.google.android.exoplayer2.util.Log;
 import com.google.zxing.common.detector.MathUtils;
 
 import org.telegram.messenger.AndroidUtilities;
@@ -486,11 +487,13 @@ public class ProfileStoriesView extends View implements NotificationCenter.Notif
     @Override
     protected void dispatchDraw(Canvas canvas) {
         float rright = rightAnimated.set(this.right);
-        float avatarPullProgress = Utilities.clamp((avatarContainer.getScaleX() - 1f) / 0.4f, 1f, 0f);
-        float insetMain = AndroidUtilities.lerp(AndroidUtilities.dpf2(4f), AndroidUtilities.dpf2(3.5f), avatarPullProgress);
-        insetMain *= progressToInsets;
-        float ax = avatarContainer.getX() + insetMain * avatarContainer.getScaleX();
-        float ay = avatarContainer.getY() + insetMain * avatarContainer.getScaleY();
+        final float scaleMin = 1.0f;
+        final float scaleMax = 2.5f;
+        float avatarPullProgress = clamp((avatarContainer.getScaleX() - scaleMin) / (scaleMax - scaleMin), 1f, 0f);
+        float insetMain = calculateInsetMain(avatarContainer.getScaleX());
+        float shift = (avatarContainer.getScaleX() - 1f) * (avatarContainer.getWidth() / 2f);
+        float ax = avatarContainer.getX() + insetMain * avatarContainer.getScaleX() - shift;
+        float ay = avatarContainer.getY() + insetMain * avatarContainer.getScaleY() - shift;
         float aw = (avatarContainer.getWidth() - insetMain * 2) * avatarContainer.getScaleX();
         float ah = (avatarContainer.getHeight() - insetMain * 2) * avatarContainer.getScaleY();
         rect1.set(ax, ay, ax + aw, ay + ah);
@@ -764,6 +767,23 @@ public class ProfileStoriesView extends View implements NotificationCenter.Notif
         }
 
         canvas.restore();
+    }
+
+    private float calculateInsetMain(float avatarScale) {
+        float insetMain;
+        if (avatarScale <= 1.2f) {
+            float t = (avatarScale - 1.0f) / 0.2f;
+            insetMain = lerp(dpf2(0.5f), dpf2(0.75f), t);
+        } else if (avatarScale <= 2.0f) {
+            float t = (avatarScale - 1.2f) / 0.8f;
+            insetMain = lerp(dpf2(0.75f), dpf2(3.25f), t);
+        } else {
+            float t = (avatarScale - 2.0f) / 0.5f;
+            insetMain = lerp(dpf2(3.25f), dpf2(3.5f), t);
+        }
+
+        insetMain *= progressToInsets;
+        return insetMain;
     }
 
     private void animateBounce() {

@@ -375,6 +375,11 @@ public class AvatarPreviewPagerIndicator extends View implements ProfileGalleryV
         invalidate();
     }
 
+    @Override
+    public void invalidateGradient() {
+
+    }
+
     public void setProfileGalleryView(ProfileGalleryView profileGalleryView) {
         this.profileGalleryView = profileGalleryView;
     }

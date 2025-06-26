@@ -1137,6 +1137,28 @@ public class AndroidUtilities {
         return bitmap;
     }
 
+    public static int[] calculateVerticalAverageColors(Bitmap bitmap) {
+        int width = bitmap.getWidth();
+        int height = bitmap.getHeight();
+        int[] result = new int[width];
+
+        for (int x = 0; x < width; x++) {
+            long r = 0, g = 0, b = 0;
+            for (int y = 0; y < height; y++) {
+                int color = bitmap.getPixel(x, y);
+                r += Color.red(color);
+                g += Color.green(color);
+                b += Color.blue(color);
+            }
+            r /= height;
+            g /= height;
+            b /= height;
+            result[x] = Color.rgb((int) r, (int) g, (int) b);
+        }
+
+        return result;
+    }
+
     private static class LinkSpec {
         String url;
         int start;
