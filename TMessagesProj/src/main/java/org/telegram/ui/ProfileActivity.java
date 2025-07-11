@@ -5859,7 +5859,7 @@ public class ProfileActivity extends BaseFragment implements NotificationCenter.
         playProfileAnimation = 0;
 
         Bundle args = new Bundle();
-        args.putLong("chat_id", chatId);
+        args.putLong("chat_id", chatId); // comment
         presentFragment(TopicsFragment.getTopicsOrChat(this, args));
     }
 
