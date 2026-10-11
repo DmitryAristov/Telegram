@@ -1,3 +1,26 @@
+# Telegram Android Contest 2025 · Round 1
+
+A contest entry redesigning the Telegram for Android profile screen.
+
+**Task:** recreate the interface and animations from a video reference while preserving existing functionality.
+
+**Implementation:** redesigned profile screen, custom element animations and transitions when opening and closing the screen.
+
+**Result:** fourth-place prize category (IV).
+
+[Task](https://t.me/contest/420) · [Result](https://contest.com/android2025-r1/entry6979) · [Submission commit](https://github.com/DmitryAristov/Telegram/commit/510bc78eb53b3a087d57eb02e86ee55ff4d1cbed)
+
+<div align="center">
+  <video
+    src="https://github.com/user-attachments/assets/54d00b4b-8eeb-48e1-b670-4901c4247714"
+    controls>
+  </video>
+</div>
+
+---
+
+## Original Telegram documentation
+
 ## Telegram messenger for Android
 
 [Telegram](https://telegram.org) is a messaging app with a focus on speed and security. It’s superfast, simple and free.
